@@ -1,0 +1,102 @@
+initialize() {
+  // Arguments: t, l, rho_t, rho_l, s, nRinit, DC, N1, nA, nB, N2, M1, M2
+  
+  initializeMutationRate(0);
+  initializeRecombinationRate(0);
+  
+  initializeMutationType('m1', DC, 'f', s);
+  m1.convertToSubstitution = F;
+  m1.mutationStackGroup = 1;
+  m1.mutationStackPolicy = 'l';
+  
+  initializeGenomicElementType("g1", c(m1), c(1));
+  initializeGenomicElement(g1, 0, 0);
+  initializeSex("A");
+}
+
+modifyChild() {
+  matAlleles = sum(parent1.genomes.countOfMutationsOfType(m1));
+  patAlleles = sum(parent2.genomes.countOfMutationsOfType(m1));
+  
+  dc = asFloat(m1.dominanceCoeff);
+  effMat = ifelse(matAlleles == 0, 0., ifelse(matAlleles == 1, dc, 1.));
+  effPat = ifelse(patAlleles == 0, 0., ifelse(patAlleles == 1, dc, 1.));
+  
+  t_eff = t * (1 - (rho_t * effMat));
+  l_eff = l * (1 - (rho_l * effPat));
+  
+  matCytotype = parent1.tag;
+  patCytotype = parent2.tag;
+  
+  eggCytotype = runif(1, 0, 1) < t_eff ? matCytotype else 0;
+  
+  if (patCytotype != 0 & patCytotype != eggCytotype & runif(1, 0, 1) < l_eff) {
+    return F;
+  }
+  
+  child.tag = eggCytotype;
+  return T;
+}
+
+function (float) gameteFrequency (integer cytotype, integer genotype, object pop) {
+  cytoInds = pop.individuals[which(pop.individuals.tag == cytotype)];
+  mutCount = sum(cytoInds.genomes.countOfMutationsOfType(m1));
+  return(ifelse(genotype == 0, ((length(cytoInds) * 2) - mutCount), mutCount) / (N1 * 2));
+}
+
+function (integer) beta (float tra, float mod, float popsize) {
+  b = (1 + sqrt(1 - ((4 * (1 - tra) * tra) / mod))) / (2 * tra);
+  return(asInteger(round(b * popsize)));
+}
+
+function (void) recordFrequencies (void) {
+  sim.setValue('hist_Or', c((isNULL(sim.getValue('hist_Or')) ? 'hist_Or' else sim.getValue('hist_Or')), gameteFrequency(0, 0, p1)));
+  sim.setValue('hist_OR', c((isNULL(sim.getValue('hist_OR')) ? 'hist_OR' else sim.getValue('hist_OR')), gameteFrequency(0, 1, p1)));
+  sim.setValue('hist_Ar', c((isNULL(sim.getValue('hist_Ar')) ? 'hist_Ar' else sim.getValue('hist_Ar')), gameteFrequency(1, 0, p1)));
+  sim.setValue('hist_AR', c((isNULL(sim.getValue('hist_AR')) ? 'hist_AR' else sim.getValue('hist_AR')), gameteFrequency(1, 1, p1)));
+  sim.setValue('hist_Br', c((isNULL(sim.getValue('hist_Br')) ? 'hist_Br' else sim.getValue('hist_Br')), gameteFrequency(2, 0, p1)));
+  sim.setValue('hist_BR', c((isNULL(sim.getValue('hist_BR')) ? 'hist_BR' else sim.getValue('hist_BR')), gameteFrequency(2, 1, p1)));
+}
+
+function (void) outputFrequencies (void) {
+  catn(sim.getValue('hist_Or'));
+  catn(sim.getValue('hist_OR'));
+  catn(sim.getValue('hist_Ar'));
+  catn(sim.getValue('hist_AR'));
+  catn(sim.getValue('hist_Br'));
+  catn(sim.getValue('hist_BR'));
+}
+
+1 early() {
+  sim.addSubpop('p1', asInteger(N1));
+  p1.individuals.tag = 0;
+  if (nA > 0) { p1.sampleIndividuals(asInteger(nA), tag = 0).tag = 1; }
+  if (nB > 0) { p1.sampleIndividuals(asInteger(nB), tag = 0).tag = 2; }
+  
+  sim.addSubpop('p2', asInteger(N2));
+  p2.individuals.tag = 0;
+  p2.sampleIndividuals(beta(t, l, N2)).tag = 1;
+  
+  sim.addSubpop('p3', asInteger(N2));
+  p3.individuals.tag = 0;
+  p3.sampleIndividuals(beta(t, l, N2)).tag = 2;
+  
+  p1.setMigrationRates(c(2, 3), c(M1, M2));
+  p2.setMigrationRates(c(1, 3), c(0, 0));
+  p3.setMigrationRates(c(1, 2), c(0, 0));
+  
+  recordFrequencies();
+}
+
+1 : 1000 late() {
+  recordFrequencies();
+}
+
+200 late() {
+  p1.sampleIndividuals(asInteger(nRinit)).genome1.addNewDrawnMutation(m1, 0);
+}
+
+1000 late() {
+  outputFrequencies();
+  sim.simulationFinished();
+}

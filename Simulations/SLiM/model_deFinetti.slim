@@ -1,0 +1,79 @@
+initialize() {
+  // Arguments: t, l, N1, nA, nB, N2, M1, M2
+    
+  initializeMutationRate(0);
+  initializeRecombinationRate(0);
+  
+  initializeMutationType('m1', 1, 'f', 0);
+  m1.convertToSubstitution = F;
+  m1.mutationStackGroup = 1;
+  m1.mutationStackPolicy = 'l';
+  
+  initializeGenomicElementType("g1", c(m1), c(1));
+  initializeGenomicElement(g1, 0, 0);
+  initializeSex("A");
+}
+
+modifyChild() {
+  matCytotype = parent1.tag;
+  patCytotype = parent2.tag;
+  
+  eggCytotype = runif(1, 0, 1) < t ? matCytotype else 0;
+  
+  if (patCytotype != 0 & patCytotype != eggCytotype & runif(1, 0, 1) < l) {
+    return F;
+  }
+  
+  child.tag = eggCytotype;
+  return T;
+}
+
+function (string) cytoFrequencies (object pop) {
+  OInds = pop.individuals[which(pop.individuals.tag == 0)];
+  AInds = pop.individuals[which(pop.individuals.tag == 1)];
+  BInds = pop.individuals[which(pop.individuals.tag == 2)];
+  return(paste(c("{", length(OInds) / N1, ",", length(AInds) / N1, ",", length(BInds) / N1, "}"), sep = ""));
+}
+
+function (integer) beta (float tra, float mod, float popsize) {
+  b = (1 + sqrt(1 - ((4 * (1 - tra) * tra) / mod))) / (2 * tra);
+  return(asInteger(round(b * popsize)));
+}
+
+function (void) recordFrequencies (void) {
+  sim.setValue('triplets', c((isNULL(sim.getValue('triplets')) ? NULL else paste(c(sim.getValue('triplets'), ","), sep = "")), cytoFrequencies(p1)));
+}
+
+function (void) outputFrequencies (void) {
+  catn(sim.getValue('triplets'));
+}
+
+1 early() {
+  sim.addSubpop('p1', asInteger(N1));
+  p1.individuals.tag = 0;
+  if (nA > 0) { p1.sampleIndividuals(asInteger(nA), tag = 0).tag = 1; }
+  if (nB > 0) { p1.sampleIndividuals(asInteger(nB), tag = 0).tag = 2; }
+  
+  sim.addSubpop('p2', asInteger(N2));
+  p2.individuals.tag = 0;
+  p2.sampleIndividuals(beta(t, l, N2)).tag = 1;
+  
+  sim.addSubpop('p3', asInteger(N2));
+  p3.individuals.tag = 0;
+  p3.sampleIndividuals(beta(t, l, N2)).tag = 2;
+  
+  p1.setMigrationRates(c(2, 3), c(M1, M2));
+  p2.setMigrationRates(c(1, 3), c(0, 0));
+  p3.setMigrationRates(c(1, 2), c(0, 0));
+  
+  recordFrequencies();
+}
+
+1 : 50 late() {
+  recordFrequencies();
+}
+
+50 late() {
+  outputFrequencies();
+  sim.simulationFinished();
+}
